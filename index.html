@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title data-translate-key="pageTitle">Кэш vs Без кэша — полное руководство и результаты симуляции</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Google font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#f6f7f9;
+      --card:#ffffff;
+      --muted:#6b7280;
+      --accent:#0ea5a4;
+      --text:#0b1220;
+      --code-bg:#f3f4f6;
+      --shadow: 0 8px 30px rgba(15,23,42,0.06);
+      --max-width:1100px;
+    }
+    [data-theme="dark"]{
+      --bg:#071025;
+      --card:#071829;
+      --muted:#9aa6b2;
+      --accent:#2dd4bf;
+      --text:#dbeafe;
+      --code-bg:#0b1220;
+      --shadow: 0 12px 40px rgba(2,6,23,0.7);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background:linear-gradient(180deg,var(--bg),#ffffff00 40%);
+      color:var(--text);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      line-height:1.55;
+    }
+
+    /* page layout */
+    header.site-header{
+      background:linear-gradient(90deg,var(--card), color-mix(in srgb, var(--card) 70%, transparent));
+      position:sticky; top:0; z-index:40;
+      border-bottom:1px solid rgba(0,0,0,0.04);
+      backdrop-filter: blur(6px);
+    }
+    .header-inner{
+      max-width:var(--max-width); margin:0 auto; padding:18px 20px; display:flex; align-items:center; gap:18px;
+      transition: max-width 0.3s ease-in-out;
+    }
+    .brand { display:flex; gap:12px; align-items:center; }
+    .brand .logo{
+      width:46px; height:46px; border-radius:10px; background:linear-gradient(135deg,var(--accent),#0ea5ff); display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:18px;
+      box-shadow: var(--shadow);
+    }
+    .brand h1{ margin:0; font-size:18px; }
+    .meta { margin-left:auto; display:flex; gap:10px; align-items:center; }
+
+    /* content */
+    .container{
+      max-width:var(--max-width); margin:28px auto; padding:0 20px 120px;
+      display:grid; grid-template-columns: 1fr 320px; gap:28px;
+      transition: max-width 0.3s ease-in-out;
+    }
+    .article{
+      background:var(--card); border-radius:12px; padding:28px; box-shadow:var(--shadow);
+    }
+    .aside{
+      position:relative;
+    }
+    .toc{
+      position:sticky; top:88px; background:var(--card); border-radius:10px; padding:18px; box-shadow:var(--shadow);
+    }
+
+    h2{ margin-top:28px; color:var(--accent); font-size:20px; display:flex; align-items:center; gap:10px; }
+    h3{ margin-top:18px; font-size:16px; color:var(--text) }
+    p{ margin:12px 0; color:var(--text) }
+    .lede{ font-size:18px; color:var(--muted); margin-bottom:12px; }
+
+    /* code */
+    pre, code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+      background:var(--code-bg); color:var(--text);
+      border-radius:8px; padding:10px; display:block;
+    }
+    code.inline{ display:inline-block; padding:2px 6px; border-radius:6px; font-size:0.95em; }
+
+    /* boxes */
+    .box { background: linear-gradient(0deg,var(--card),color-mix(in srgb,var(--card) 85%, transparent)); padding:14px; border-radius:10px; margin:12px 0; border:1px solid rgba(0,0,0,0.03); }
+    .muted { color:var(--muted); font-size:0.95em; }
+
+    /* table */
+    table{ width:100%; border-collapse:collapse; margin:18px 0; }
+    th,td{ border:1px solid rgba(0,0,0,0.06); padding:10px; text-align:center; font-size:14px; }
+    th{ background:color-mix(in srgb,var(--card) 60%, #f3f4f6); font-weight:600; }
+
+    /* charts */
+    .chart-wrap{ margin:16px 0; padding:14px; background:var(--card); border-radius:10px; border:1px solid rgba(0,0,0,0.04); }
+    canvas{ max-width:100%; height:320px; }
+
+    /* small UI */
+    .controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+    .btn{ padding:8px 12px; border-radius:8px; border:0; cursor:pointer; background:var(--accent); color:white; box-shadow: 0 6px 18px rgba(14,165,164,0.12); font-weight:600 }
+    .btn.ghost{ background:transparent; color:var(--accent); border:1px solid rgba(14,165,164,0.12) }
+
+    input[type=file]{ display:none }
+    label.file-btn{ padding:8px 12px; border-radius:8px; cursor:pointer; background:rgba(0,0,0,0.04) }
+
+    /* TOC */
+    .toc h4{ margin:0 0 8px 0; color:var(--accent) }
+    .toc ul{ list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px }
+    .toc a{ color:var(--text); text-decoration:none; font-size:14px }
+    .toc a:hover{ text-decoration:underline }
+
+    footer.site-footer{ max-width:var(--max-width); margin:30px auto; padding:22px 20px; color:var(--muted); text-align:center; transition: max-width 0.3s ease-in-out; }
+
+    /* responsive */
+    @media (max-width:980px){
+      .container{ grid-template-columns: 1fr; padding-bottom:60px }
+      .toc{ position:static }
+    }
+
+    /* NEW: Full width layout toggle styles */
+    body.full-width .header-inner,
+    body.full-width .container,
+    body.full-width .site-footer {
+      max-width: none;
+      padding-left: 30px;
+      padding-right: 30px;
+    }
+  </style>
+</head>
+<body data-theme="light">
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="logo">C</div>
+        <div>
+          <h1 data-translate-key="mainTitle">Кэш vs Без кэша — симуляция и подробный разбор</h1>
+          <div class="muted" data-translate-key="mainSubtitle">Полный разбор: теория, стратегии, инвалидация и результаты эксперимента</div>
+        </div>
+      </div>
+
+      <div class="meta">
+        <div class="muted" data-translate-key="author">Автор: Ахмед</div>
+        <button id="layoutToggle" class="btn ghost" title="Toggle Layout" data-translate-key="layoutToggle">Полная ширина</button>
+        <button id="langToggle" class="btn ghost" title="Switch language">EN</button>
+        <button id="themeToggle" class="btn ghost" title="Toggle theme" data-translate-key="themeToggle">Тёмная тема</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page content -->
+  <div class="container">
+    <!-- Article -->
+    <article class="article" id="article">
+      <p class="lede" data-translate-key="lede">Всем привет! Меня зовут Ахмед Кашима. Я занимаюсь backend-разработкой и мобильной разработкой, работаю с Python (Django), Flutter, Swift, а также с технологиями Docker, Redis и Linux. Сегодня я хочу поговорить о кэшировании — одной из ключевых тем в построении производительных и устойчивых систем. Разберём базовые концепции и некоторые тонкие моменты, которые часто остаются «за кадром» даже у опытных разработчиков.</p>
+      
+      <!-- ... The rest of your article HTML remains exactly the same ... -->
+      <section id="intro">
+        <h2 data-translate-key="introTitle">Что такое кэширование?</h2>
+        <p data-translate-key="introP1">Кэширование – это способ хранения данных как можно ближе к месту их использования. Как правило, для этого используется быстродействующая память (RAM).</p>
+      </section>
+
+      <section id="why">
+        <h2 data-translate-key="whyTitle">Для чего нужно кэширование?</h2>
+        <p data-translate-key="whyP1">Кэширование появилось давно и использовалось для ускорения работы процессора с оперативной памятью. Наверняка каждый из вас слышал об иерархии кэша L1, L2 и L3, применяемого в процессорах. Добавление кэша значительно ускорило работу с памятью, но и принесло дополнительные проблемы. Самая известная и сложная из них – это инвалидация данных. Мы уделим ей особое внимание чуть позже.</p>
+        <p data-translate-key="whyP2">С этой проблемой (и рядом других, о которых мы тоже поговорим) связан главный принцип работы с кэшем. Он очень прост: если вы можете обойтись без кэширования, то именно так и сделайте.</p>
+        <p data-translate-key="whyP3">Например, если у вас простое приложение или небольшая нагрузка, то кэширование вам не нужно. Важно понимать, что кэширование само по себе “не бесплатное”, оно привносит в систему дополнительную сложность: появляются дополнительные компоненты, которые надо сопровождать, усложняется структура кода.</p>
+        <p data-translate-key="whyP4">Но если у вас большая частота запросов (Requests per Second, RPS), если запросы эти “тяжелые ”, если вам слишком дорого масштабировать основное хранилище – любой из этих причин и, тем более, их сочетания достаточно, чтобы задуматься о кэшировании всерьёз. При грамотном подходе оно поможет уменьшить в разы время ответа при обращении к данным.</p>
+        <p data-translate-key="whyP5">Поэтому более продвинутый вариант принципа работы с кэшем можно сформулировать, перефразируя знаменитую цитату немецкого богослова XVIII века Карла Фридриха Этингера: “Дай мне удачу, чтобы без кэша можно было обойтись, дай мне сил, если обойтись без него нельзя – и дай мне мудрости отличить одну ситуацию от другой”.</p>
+      </section>
+
+      <section id="how">
+        <h2 data-translate-key="howTitle">Как работает кэширование?</h2>
+        <p data-translate-key="howP1">Логически кэш представляет из себя базу типа ключ-значение. Каждая запись в кэше имеет “время жизни”, по истечении которого она удаляется. Это время называют термином Time To Live или TTL. Размер кэша гораздо меньше, чем у основного хранилища, но этот недостаток компенсируется высокой скоростью доступа к данным. Это достигается за счет размещения кэша в быстродействующей памяти ОЗУ (RAM). Поэтому обычно кэш содержит самые “горячие” данные.</p>
+        <h3 data-translate-key="howExampleTitle">Пример работы кэша</h3>
+        <div class="box">
+          <p><b data-translate-key="howExample1">Первое обращение:</b></p>
+          <ol>
+            <li data-translate-key="howExample1_1">Пользователь запрашивает некие данные</li>
+            <li data-translate-key="howExample1_2">Кэш приложения ПУСТ, поэтому приложение обращается к базе данных (БД)</li>
+            <li data-translate-key="howExample1_3">БД возвращает запрошенные данные приложению</li>
+            <li data-translate-key="howExample1_4">Приложение сохраняет полученные данные в кэше</li>
+            <li data-translate-key="howExample1_5">Пользователь получает данные</li>
+          </ol>
+          <p><b data-translate-key="howExample2">Последующие обращения:</b></p>
+          <ol>
+            <li data-translate-key="howExample2_1">Пользователь запрашивает данные</li>
+            <li data-translate-key="howExample2_2">Приложение уже имеет эти данные в кэше и поэтому НЕ ОБРАЩАЕТСЯ за ними к БД</li>
+            <li data-translate-key="howExample2_3">Пользователь получает данные</li>
+          </ol>
+          <p class="muted" data-translate-key="howExampleNote">Из этого простого примера видно, что только первый запрос данных приводит к обращению к БД. Все последующие запросы попадают в кэш до тех пор, пока не истечет TTL.</p>
+        </div>
+      </section>
+
+      <section id="metrics">
+        <h2 data-translate-key="metricsTitle">Метрики кэша</h2>
+        <p data-translate-key="metricsP1">Работу кэша можно оценивать при помощи множества метрик разной степени полезности. Я опишу те, которые считаю базовыми и наиболее полезными.</p>
+        <ul>
+          <li data-translate-key="metricsL1"><b>Объём памяти</b>, выделенный под кэш — сколько используется ресурсов.</li>
+          <li data-translate-key="metricsL2"><b>RPS чтения/записи</b> — количество операций чтения/записи за единицу времени.</li>
+          <li data-translate-key="metricsL3"><b>Количество элементов</b> в кэше — полезно знать в дополнение к объёму памяти.</li>
+          <li data-translate-key="metricsL4"><b>Hit rate</b> — процент извлечения данных из кэша (чем ближе к 100%, тем лучше).</li>
+          <li data-translate-key="metricsL5"><b>Expired rate</b> — процент удалений по TTL.</li>
+          <li data-translate-key="metricsL6"><b>Eviction rate</b> — процент вытеснения записей при достижении лимита памяти.</li>
+        </ul>
+      </section>
+
+      <section id="what-to-cache">
+        <h2 data-translate-key="whatToCacheTitle">Что можно кэшировать?</h2>
+        <p data-translate-key="whatToCacheP1">Строго говоря, кэшировать можно что угодно, но не всегда это целесообразно. Все сильно зависит от данных и паттерна их использования.</p>
+        <p data-translate-key="whatToCacheP2">Все данные можно условно разделить на 3 группы по частоте изменений:</p>
+        <ol>
+          <li data-translate-key="whatToCacheL1"><b>Меняются часто</b> — обычно не кэшируем (пример: ошибки, но об этом позже).</li>
+          <li data-translate-key="whatToCacheL2"><b>Меняются нечасто</b> — хорошие кандидаты (списки товаров, описания).</li>
+          <li data-translate-key="whatToCacheL3"><b>Меняются крайне редко</b> — идеальные кандидаты (картинки, DNS).</li>
+        </ol>
+      </section>
+
+      <section id="types">
+        <h2 data-translate-key="typesTitle">Типы кэшей</h2>
+        <p data-translate-key="typesP1">С точки зрения архитектуры, можно выделить два типа кэшей: встроенный (inline) и отдельный (sidecar).</p>
+        <h3 data-translate-key="typesInlineTitle">Встроенный кэш (inline)</h3>
+        <p data-translate-key="typesInlineP1">Встроенный кэш живёт в процессе приложения — самый быстрый вариант, но проблемный при множестве реплик приложения.</p>
+        <h3 data-translate-key="typesSidecarTitle">Отдельный кэш (sidecar)</h3>
+        <p data-translate-key="typesSidecarP1">Отдельный сервис (Redis, Memcached) — медленнее, но согласованный и масштабируемый.</p>
+        <div class="box">
+          <h3 data-translate-key="typesCompareTitle">Сравнение</h3>
+          <table>
+            <tr><th data-translate-key="typesTableH1">Характеристика</th><th data-translate-key="typesTableH2">Inline</th><th data-translate-key="typesTableH3">Sidecar</th></tr>
+            <tr><td data-translate-key="typesTableR1C1">Скорость</td><td data-translate-key="typesTableR1C2">Высокая</td><td data-translate-key="typesTableR1C3">Ниже (сетевой вызов)</td></tr>
+            <tr><td data-translate-key="typesTableR2C1">Память</td><td data-translate-key="typesTableR2C2">Делится с приложением</td><td data-translate-key="typesTableR2C3">Отдельная</td></tr>
+            <tr><td data-translate-key="typesTableR3C1">Согласованность</td><td data-translate-key="typesTableR3C2">Плохая</td><td data-translate-key="typesTableR3C3">Хорошая</td></tr>
+            <tr><td data-translate-key="typesTableR4C1">Масштабируемость</td><td data-translate-key="typesTableR4C2">Труднее</td><td data-translate-key="typesTableR4C3">Проще</td></tr>
+            <tr><td data-translate-key="typesTableR5C1">Сложность</td><td data-translate-key="typesTableR5C2">Проще</td><td data-translate-key="typesTableR5C3">Сложнее</td></tr>
+          </table>
+        </div>
+      </section>
+
+      <section id="strategies">
+        <h2 data-translate-key="strategiesTitle">Стратегии работы с кэшем</h2>
+        <h3 data-translate-key="strategiesT1">Cache through</h3>
+        <p data-translate-key="strategiesP1">Все запросы идут через кэш, который сам обращается в БД при miss. Для приложения это единое хранилище.</p>
+        <h3 data-translate-key="strategiesT2">Read through</h3>
+        <p data-translate-key="strategiesP2">Кэш отвечает за обращение в БД при промахе и сам заполняет себя.</p>
+        <h3 data-translate-key="strategiesT3">Write through</h3>
+        <p data-translate-key="strategiesP3">Запись идёт через кэш: кэш записывает в БД и обновляет себя только после успешной записи.</p>
+        <h3 data-translate-key="strategiesT4">Cache aside (write/read aside)</h3>
+        <p data-translate-key="strategiesP4">Приложение самостоятельно проверяет кэш и БД и решает, куда обратиться; гибкий, но сложнее в коде.</p>
+        <h3 data-translate-key="strategiesT5">Cache ahead (опережающее кэширование)</h3>
+        <p data-translate-key="strategiesP5">Фоновый процесс заранее заполняет кэш и клиентские запросы читают только кэш.</p>
+      </section>
+
+      <section id="invalidation">
+        <h2 data-translate-key="invalidationTitle">Стратегии инвалидации</h2>
+        <p data-translate-key="invalidationP1">Инвалидация — это удаление или пометка данных как устаревших. Основные подходы:</p>
+        <h3 data-translate-key="invalidationT1">TTL</h3>
+        <p data-translate-key="invalidationP2">Простейший метод — каждая запись имеет TTL. Минусы: массовое протухание (spike) — когда множество ключей истекает одновременно, вызывая лавину запросов к базе данных (также известно как <b>проблема "Thundering Herd"</b>). Решается с помощью jitter.</p>
+        <h3 data-translate-key="invalidationT2">Jitter</h3>
+        <p data-translate-key="invalidationP3">Добавляем случайное смещение к TTL, чтобы избежать одновременного истечения большого числа ключей.</p>
+        <h3 data-translate-key="invalidationT3">Event-based invalidation</h3>
+        <p data-translate-key="invalidationP4">Инвалидация при событии — когда данные в источнике изменились, мы инвалидируем соответствующие ключи.</p>
+        <h3 data-translate-key="invalidationT4">Singleflight / Request coalescing</h3>
+        <p data-translate-key="invalidationP5">Если много одинаковых одновременных запросов, объединяем их в один запрос к источнику и раздаём результат всем ожидающим.</p>
+      </section>
+
+      <section id="eviction">
+        <h2 data-translate-key="evictionTitle">Стратегии вытеснения</h2>
+        <ul>
+          <li data-translate-key="evictionL1"><b>Random</b> — удаляем случайную запись.</li>
+          <li data-translate-key="evictionL2"><b>TTL</b> — вытеснение по концу жизни записи.</li>
+          <li data-translate-key="evictionL3"><b>LRU</b> — Least Recently Used.</li>
+          <li data-translate-key="evictionL4"><b>LFU</b> — Least Frequently Used.</li>
+        </ul>
+      </section>
+
+      <section id="error-cache">
+        <h2 data-translate-key="errorCacheTitle">Кэширование ошибок</h2>
+        <p data-translate-key="errorCacheP1">Кэширование ошибок помогает против cache-miss атак и защищает источник, но требует аккуратных TTL и, желательно, отдельного кэша для ошибок.</p>
+      </section>
+
+      <section id="practical">
+        <h2 data-translate-key="practicalTitle">Практический пример (псевдокод)</h2>
+        <pre><code>def get_user_profile(user_id):
+    key = f"user:{user_id}:profile"
+    val = cache.get(key)
+    if val is not None:
+        return val  # cache hit
+    row = db.query_user(user_id)
+    if row is None:
+        cache.set(key, None, ttl=5)  # negative cache
+        return None
+    cache.set(key, row, ttl=300)
+    return row
+</code></pre>
+      </section>
+
+      <section id="compare">
+        <h2 data-translate-key="compareTitle">Как сравнивать «с кэшем» и «без кэша»</h2>
+        <p data-translate-key="compareP1">Рекомендуемые метрики и визуализации:</p>
+        <ul>
+          <li data-translate-key="compareL1">Гистограммы latency (p50/p95/p99).</li>
+          <li data-translate-key="compareL2">Линейные графики latency over time.</li>
+          <li data-translate-key="compareL3">Hit rate dynamics.</li>
+          <li data-translate-key="compareL4">Queue length on DB (если есть такие метрики в симуляции).</li>
+        </ul>
+      </section>
+
+      <section id="best">
+        <h2 data-translate-key="bestTitle">Best practices и чек-лист внедрения</h2>
+        <ul>
+          <li data-translate-key="bestL1">Начните с cache-aside для чтений.</li>
+          <li data-translate-key="bestL2">Мониторьте hit rate, evictions и latencies.</li>
+          <li data-translate-key="bestL3">Используйте jitter для TTL и singleflight для горячих ключей.</li>
+          <li data-translate-key="bestL4">Кэшируйте ошибки осторожно с короткими TTL.</li>
+        </ul>
+      </section>
+
+      <section id="conclusion">
+        <h2 data-translate-key="conclusionTitle">Заключение</h2>
+        <p data-translate-key="conclusionP1">Кэш — мощный инструмент, но он добавляет сложности. Используйте метрики и тестируйте. Если пришлёшь CSV с результатами симуляции, я помогу добавить реальные графики и подробный вывод прямо в этот пост.</p>
+      </section>
+
+      <!-- Charts and CSV uploader -->
+      <section id="results" style="margin-top:22px;">
+        <h2 data-translate-key="resultsTitle">Результаты симуляции (пример)</h2>
+
+        <div class="box">
+          <div style="display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap: wrap;">
+            <div class="muted" data-translate-key="resultsUploadDesc">Загрузите CSV (log_no_cache.csv и log_with_cache.csv) для построения графиков из реальных данных:</div>
+            <div class="controls">
+              <label class="file-btn" title="Upload no-cache CSV">
+                <input id="fileNoCache" type="file" accept=".csv">
+                <span data-translate-key="resultsUploadNoCache">Загрузить log_no_cache.csv</span>
+              </label>
+              <label class="file-btn" title="Upload with-cache CSV">
+                <input id="fileWithCache" type="file" accept=".csv">
+                <span data-translate-key="resultsUploadWithCache">Загрузить log_with_cache.csv</span>
+              </label>
+              <button id="useSample" class="btn" data-translate-key="resultsUseSample">Использовать примерные данные</button>
+            </div>
+          </div>
+          <p class="muted" style="margin-top:10px" data-translate-key="resultsUploadNote">Поддерживаемые поля в CSV: <code>time,client,response_time,source</code>. Если названия другие — при загрузке выберите соответствие столбцов.</p>
+        </div>
+
+        <div class="chart-wrap">
+          <h3 data-translate-key="resultsChart1Title">Время отклика — линийный график</h3>
+          <canvas id="timeChart"></canvas>
+        </div>
+
+        <div class="chart-wrap">
+          <h3 data-translate-key="resultsChart2Title">Распределение времени отклика — гистограмма</h3>
+          <canvas id="histChart"></canvas>
+        </div>
+
+        <div class="chart-wrap">
+          <h3 data-translate-key="resultsTableTitle">Сводная статистика</h3>
+          <table id="statsTable">
+            <thead><tr><th data-translate-key="statsH1">Сценарий</th><th data-translate-key="statsH2">Среднее</th><th data-translate-key="statsH3">STD</th><th data-translate-key="statsH4">Passed %</th><th data-translate-key="statsH5">Failed %</th></tr></thead>
+            <tbody>
+              <tr><td data-translate-key="statsR1C1">Без кэша</td><td id="avgNo">—</td><td id="stdNo">—</td><td id="passNo">—</td><td id="failNo">—</td></tr>
+              <tr><td data-translate-key="statsR1C2">С кэшем</td><td id="avgYes">—</td><td id="stdYes">—</td><td id="passYes">—</td><td id="failYes">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="links">
+        <h2 data-translate-key="linksTitle">Полезные ссылки</h2>
+        <ul>
+          <li><a href="https://redis.io/" target="_blank">Redis — официальный сайт</a></li>
+          <li><a href="https://en.wikipedia.org/wiki/Cache_(computing)" target="_blank">Wikipedia — Cache (computing)</a></li>
+          <li><a href="https://github.com/golang/sync/tree/master/singleflight" target="_blank">Go singleflight</a></li>
+        </ul>
+      </section>
+    </article>
+
+    <!-- Sidebar / TOC -->
+    <aside class="aside">
+      <div class="toc">
+        <h4 data-translate-key="tocTitle">Содержание</h4>
+        <ul>
+          <li><a href="#intro" data-translate-key="tocL1">Что такое кэширование?</a></li>
+          <li><a href="#why" data-translate-key="tocL2">Для чего нужно</a></li>
+          <li><a href="#how" data-translate-key="tocL3">Как работает</a></li>
+          <li><a href="#metrics" data-translate-key="tocL4">Метрики</a></li>
+          <li><a href="#what-to-cache" data-translate-key="tocL5">Что кэшировать</a></li>
+          <li><a href="#types" data-translate-key="tocL6">Типы кэшей</a></li>
+          <li><a href="#strategies" data-translate-key="tocL7">Стратегии</a></li>
+          <li><a href="#invalidation" data-translate-key="tocL8">Инвалидация</a></li>
+          <li><a href="#eviction" data-translate-key="tocL9">Вытеснение</a></li>
+          <li><a href="#error-cache" data-translate-key="tocL10">Кэширование ошибок</a></li>
+          <li><a href="#practical" data-translate-key="tocL11">Псевдокод</a></li>
+          <li><a href="#results" data-translate-key="tocL12">Результаты симуляции</a></li>
+        </ul>
+        <div style="margin-top:12px; display:flex; gap:8px;">
+          <button id="scrollTop" class="btn ghost" data-translate-key="tocBtnUp">Наверх</button>
+          <button id="printBtn" class="btn" data-translate-key="tocBtnPrint">Печать</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="site-footer" data-translate-key="footer">
+    © 2025 — статья-демонстрация.
+  </footer>
+
+<script>
+/* =========================
+   Translations
+   ========================= */
+const translations = {
+  ru: {
+    pageTitle: "Кэш vs Без кэша — полное руководство и результаты симуляции",
+    mainTitle: "Кэш vs Без кэша — симуляция и подробный разбор",
+    mainSubtitle: "Полный разбор: теория, стратегии, инвалидация и результаты эксперимента",
+    author: "Автор: Ахмед",
+    themeToggle: "Тёмная тема",
+    langToggle: "EN",
+    layoutToggle: "Полная ширина",
+    layoutToggleCentered: "По центру",
+    lede: "Всем привет! Меня зовут Ахмед Кашима. Я занимаюсь backend-разработкой и мобильной разработкой, работаю с Python (Django), Flutter, Swift, а также с технологиями Docker, Redis и Linux. Сегодня я хочу поговорить о кэшировании — одной из ключевых тем в построении производительных и устойчивых систем. Разберём базовые концепции и некоторые тонкие моменты, которые часто остаются «за кадром» даже у опытных разработчиков.",
+    introTitle: "Что такое кэширование?",
+    introP1: "Кэширование – это способ хранения данных как можно ближе к месту их использования. Как правило, для этого используется быстродействующая память (RAM).",
+    whyTitle: "Для чего нужно кэширование?",
+    whyP1: "Кэширование появилось давно и использовалось для ускорения работы процессора с оперативной памятью. Наверняка каждый из вас слышал об иерархии кэша L1, L2 и L3, применяемого в процессорах. Добавление кэша значительно ускорило работу с памятью, но и принесло дополнительные проблемы. Самая известная и сложная из них – это инвалидация данных. Мы уделим ей особое внимание чуть позже.",
+    whyP2: "С этой проблемой (и рядом других, о которых мы тоже поговорим) связан главный принцип работы с кэшем. Он очень прост: если вы можете обойтись без кэширования, то именно так и сделайте.",
+    whyP3: "Например, если у вас простое приложение или небольшая нагрузка, то кэширование вам не нужно. Важно понимать, что кэширование само по себе “не бесплатное”, оно привносит в систему дополнительную сложность: появляются дополнительные компоненты, которые надо сопровождать, усложняется структура кода.",
+    whyP4: "Но если у вас большая частота запросов (Requests per Second, RPS), если запросы эти “тяжелые ”, если вам слишком дорого масштабировать основное хранилище – любой из этих причин и, тем более, их сочетания достаточно, чтобы задуматься о кэшировании всерьёз. При грамотном подходе оно поможет уменьшить в разы время ответа при обращении к данным.",
+    whyP5: "Поэтому более продвинутый вариант принципа работы с кэшем можно сформулировать, перефразируя знаменитую цитату немецкого богослова XVIII века Карла Фридриха Этингера: “Дай мне удачу, чтобы без кэша можно было обойтись, дай мне сил, если обойтись без него нельзя – и дай мне мудрости отличить одну ситуацию от другой”.",
+    howTitle: "Как работает кэширование?",
+    howP1: "Логически кэш представляет из себя базу типа ключ-значение. Каждая запись в кэше имеет “время жизни”, по истечении которого она удаляется. Это время называют термином Time To Live или TTL. Размер кэша гораздо меньше, чем у основного хранилища, но этот недостаток компенсируется высокой скоростью доступа к данным. Это достигается за счет размещения кэша в быстродействующей памяти ОЗУ (RAM). Поэтому обычно кэш содержит самые “горячие” данные.",
+    howExampleTitle: "Пример работы кэша",
+    howExample1: "Первое обращение:",
+    howExample1_1: "Пользователь запрашивает некие данные",
+    howExample1_2: "Кэш приложения ПУСТ, поэтому приложение обращается к базе данных (БД)",
+    howExample1_3: "БД возвращает запрошенные данные приложению",
+    howExample1_4: "Приложение сохраняет полученные данные в кэше",
+    howExample1_5: "Пользователь получает данные",
+    howExample2: "Последующие обращения:",
+    howExample2_1: "Пользователь запрашивает данные",
+    howExample2_2: "Приложение уже имеет эти данные в кэше и поэтому НЕ ОБРАЩАЕТСЯ за ними к БД",
+    howExample2_3: "Пользователь получает данные",
+    howExampleNote: "Из этого простого примера видно, что только первый запрос данных приводит к обращению к БД. Все последующие запросы попадают в кэш до тех пор, пока не истечет TTL.",
+    metricsTitle: "Метрики кэша",
+    metricsP1: "Работу кэша можно оценивать при помощи множества метрик разной степени полезности. Я опишу те, которые считаю базовыми и наиболее полезными.",
+    metricsL1: "<b>Объём памяти</b>, выделенный под кэш — сколько используется ресурсов.",
+    metricsL2: "<b>RPS чтения/записи</b> — количество операций чтения/записи за единицу времени.",
+    metricsL3: "<b>Количество элементов</b> в кэше — полезно знать в дополнение к объёму памяти.",
+    metricsL4: "<b>Hit rate</b> — процент извлечения данных из кэша (чем ближе к 100%, тем лучше).",
+    metricsL5: "<b>Expired rate</b> — процент удалений по TTL.",
+    metricsL6: "<b>Eviction rate</b> — процент вытеснения записей при достижении лимита памяти.",
+    whatToCacheTitle: "Что можно кэшировать?",
+    whatToCacheP1: "Строго говоря, кэшировать можно что угодно, но не всегда это целесообразно. Все сильно зависит от данных и паттерна их использования.",
+    whatToCacheP2: "Все данные можно условно разделить на 3 группы по частоте изменений:",
+    whatToCacheL1: "<b>Меняются часто</b> — обычно не кэшируем (пример: ошибки, но об этом позже).",
+    whatToCacheL2: "<b>Меняются нечасто</b> — хорошие кандидаты (списки товаров, описания).",
+    whatToCacheL3: "<b>Меняются крайне редко</b> — идеальные кандидаты (картинки, DNS).",
+    typesTitle: "Типы кэшей",
+    typesP1: "С точки зрения архитектуры, можно выделить два типа кэшей: встроенный (inline) и отдельный (sidecar).",
+    typesInlineTitle: "Встроенный кэш (inline)",
+    typesInlineP1: "Встроенный кэш живёт в процессе приложения — самый быстрый вариант, но проблемный при множестве реплик приложения.",
+    typesSidecarTitle: "Отдельный кэш (sidecar)",
+    typesSidecarP1: "Отдельный сервис (Redis, Memcached) — медленнее, но согласованный и масштабируемый.",
+    typesCompareTitle: "Сравнение",
+    typesTableH1: "Характеристика",
+    typesTableH2: "Inline",
+    typesTableH3: "Sidecar",
+    typesTableR1C1: "Скорость",
+    typesTableR1C2: "Высокая",
+    typesTableR1C3: "Ниже (сетевой вызов)",
+    typesTableR2C1: "Память",
+    typesTableR2C2: "Делится с приложением",
+    typesTableR2C3: "Отдельная",
+    typesTableR3C1: "Согласованность",
+    typesTableR3C2: "Плохая",
+    typesTableR3C3: "Хорошая",
+    typesTableR4C1: "Масштабируемость",
+    typesTableR4C2: "Труднее",
+    typesTableR4C3: "Проще",
+    typesTableR5C1: "Сложность",
+    typesTableR5C2: "Проще",
+    typesTableR5C3: "Сложнее",
+    strategiesTitle: "Стратегии работы с кэшем",
+    strategiesT1: "Cache through",
+    strategiesP1: "Все запросы идут через кэш, который сам обращается в БД при miss. Для приложения это единое хранилище.",
+    strategiesT2: "Read through",
+    strategiesP2: "Кэш отвечает за обращение в БД при промахе и сам заполняет себя.",
+    strategiesT3: "Write through",
+    strategiesP3: "Запись идёт через кэш: кэш записывает в БД и обновляет себя только после успешной записи.",
+    strategiesT4: "Cache aside (write/read aside)",
+    strategiesP4: "Приложение самостоятельно проверяет кэш и БД и решает, куда обратиться; гибкий, но сложнее в коде.",
+    strategiesT5: "Cache ahead (опережающее кэширование)",
+    strategiesP5: "Фоновый процесс заранее заполняет кэш и клиентские запросы читают только кэш.",
+    invalidationTitle: "Стратегии инвалидации",
+    invalidationP1: "Инвалидация — это удаление или пометка данных как устаревших. Основные подходы:",
+    invalidationT1: "TTL",
+    invalidationP2: "Простейший метод — каждая запись имеет TTL. Минусы: массовое протухание (spike) — когда множество ключей истекает одновременно, вызывая лавину запросов к базе данных (также известно как <b>проблема \"Thundering Herd\"</b>). Решается с помощью jitter.",
+    invalidationT2: "Jitter",
+    invalidationP3: "Добавляем случайное смещение к TTL, чтобы избежать одновременного истечения большого числа ключей.",
+    invalidationT3: "Event-based invalidation",
+    invalidationP4: "Инвалидация при событии — когда данные в источнике изменились, мы инвалидируем соответствующие ключи.",
+    invalidationT4: "Singleflight / Request coalescing",
+    invalidationP5: "Если много одинаковых одновременных запросов, объединяем их в один запрос к источнику и раздаём результат всем ожидающим.",
+    evictionTitle: "Стратегии вытеснения",
+    evictionL1: "<b>Random</b> — удаляем случайную запись.",
+    evictionL2: "<b>TTL</b> — вытеснение по концу жизни записи.",
+    evictionL3: "<b>LRU</b> — Least Recently Used.",
+    evictionL4: "<b>LFU</b> — Least Frequently Used.",
+    errorCacheTitle: "Кэширование ошибок",
+    errorCacheP1: "Кэширование ошибок помогает против cache-miss атак и защищает источник, но требует аккуратных TTL и, желательно, отдельного кэша для ошибок.",
+    practicalTitle: "Практический пример (псевдокод)",
+    compareTitle: "Как сравнивать «с кэшем» и «без кэша»",
+    compareP1: "Рекомендуемые метрики и визуализации:",
+    compareL1: "Гистограммы latency (p50/p95/p99).",
+    compareL2: "Линейные графики latency over time.",
+    compareL3: "Hit rate dynamics.",
+    compareL4: "Queue length on DB (если есть такие метрики в симуляции).",
+    bestTitle: "Best practices и чек-лист внедрения",
+    bestL1: "Начните с cache-aside для чтений.",
+    bestL2: "Мониторьте hit rate, evictions и latencies.",
+    bestL3: "Используйте jitter для TTL и singleflight для горячих ключей.",
+    bestL4: "Кэшируйте ошибки осторожно с короткими TTL.",
+    conclusionTitle: "Заключение",
+    conclusionP1: "Кэш — мощный инструмент, но он добавляет сложности. Используйте метрики и тестируйте. Если пришлёшь CSV с результатами симуляции, я помогу добавить реальные графики и подробный вывод прямо в этот пост.",
+    resultsTitle: "Результаты симуляции (пример)",
+    resultsUploadDesc: "Загрузите CSV (log_no_cache.csv и log_with_cache.csv) для построения графиков из реальных данных:",
+    resultsUploadNoCache: "Загрузить log_no_cache.csv",
+    resultsUploadWithCache: "Загрузить log_with_cache.csv",
+    resultsUseSample: "Использовать примерные данные",
+    resultsUploadNote: "Поддерживаемые поля в CSV: <code>time,client,response_time,source</code>. Если названия другие — при загрузке выберите соответствие столбцов.",
+    resultsChart1Title: "Время отклика — линийный график",
+    resultsChart2Title: "Распределение времени отклика — гистограмма",
+    resultsTableTitle: "Сводная статистика",
+    statsH1: "Сценарий",
+    statsH2: "Среднее",
+    statsH3: "STD",
+    statsH4: "Passed %",
+    statsH5: "Failed %",
+    statsR1C1: "Без кэша",
+    statsR1C2: "С кэшем",
+    linksTitle: "Полезные ссылки",
+    tocTitle: "Содержание",
+    tocL1: "Что такое кэширование?",
+    tocL2: "Для чего нужно",
+    tocL3: "Как работает",
+    tocL4: "Метрики",
+    tocL5: "Что кэшировать",
+    tocL6: "Типы кэшей",
+    tocL7: "Стратегии",
+    tocL8: "Инвалидация",
+    tocL9: "Вытеснение",
+    tocL10: "Кэширование ошибок",
+    tocL11: "Псевдокод",
+    tocL12: "Результаты симуляции",
+    tocBtnUp: "Наверх",
+    tocBtnPrint: "Печать",
+    footer: "© 2025 — статья-демонстрация.",
+    chartTimeAxis: "Время (сим)",
+    chartResponseAxis: "Время отклика (сек)",
+    chartRequestAxis: "Количество запросов",
+    chartLabelNoCache: "Без кэша",
+    chartLabelWithCache: "С кэшем"
+  },
+  en: {
+    pageTitle: "Cache vs. No Cache — A Complete Guide and Simulation Results",
+    mainTitle: "Cache vs. No Cache — Simulation & Deep Dive",
+    mainSubtitle: "A complete breakdown: theory, strategies, invalidation, and experiment results",
+    author: "Author: Ahmed",
+    themeToggle: "Dark Theme",
+    langToggle: "РУ",
+    layoutToggle: "Full Width",
+    layoutToggleCentered: "Centered",
+    lede: "Hello everyone! My name is Ahmed Kashima. I'm a backend and mobile developer, working with Python (Django), Flutter, Swift, as well as technologies like Docker, Redis, and Linux. Today, I want to talk about caching—one of the key topics in building high-performance and resilient systems. We'll explore basic concepts and some subtle points that often remain 'behind the scenes' even for experienced developers.",
+    introTitle: "What is Caching?",
+    introP1: "Caching is a technique for storing data as close as possible to where it is used. Typically, this involves high-speed memory (RAM).",
+    whyTitle: "Why is Caching Necessary?",
+    whyP1: "Caching has been around for a long time and was originally used to speed up the processor's interaction with RAM. You've likely heard of the L1, L2, and L3 cache hierarchy used in CPUs. Adding a cache significantly sped up memory access but also introduced new challenges. The most famous and complex of these is data invalidation, which we will focus on later.",
+    whyP2: "This problem (along with others we'll discuss) is linked to the main principle of working with a cache. It's very simple: if you can do without caching, you should.",
+    whyP3: "For example, if you have a simple application or low traffic, you don't need caching. It's important to understand that caching isn't 'free'; it adds complexity to your system, introducing new components to maintain and making the code structure more complicated.",
+    whyP4: "However, if you have a high request rate (Requests per Second, RPS), if these requests are 'heavy,' or if scaling your primary storage is too expensive, any of these reasons—or a combination of them—is enough to seriously consider caching. With a smart approach, it can reduce data access response times by several factors.",
+    whyP5: "Therefore, a more advanced principle for working with a cache can be formulated by paraphrasing the famous quote from the 18th-century German theologian Karl Friedrich Oetinger: 'Grant me the fortune to get by without a cache, the strength to use one when I cannot—and the wisdom to know the difference.'",
+    howTitle: "How Does Caching Work?",
+    howP1: "Logically, a cache is a key-value store. Each entry in the cache has a 'time to live' (TTL), after which it is deleted. The cache size is much smaller than the primary storage, but this is offset by high-speed data access, achieved by storing the cache in fast RAM. Therefore, the cache typically holds the 'hottest' data.",
+    howExampleTitle: "Example of Caching in Action",
+    howExample1: "First Request:",
+    howExample1_1: "A user requests some data",
+    howExample1_2: "The application's cache is EMPTY, so the application queries the database (DB)",
+    howExample1_3: "The DB returns the requested data to the application",
+    howExample1_4: "The application saves the received data in the cache",
+    howExample1_5: "The user receives the data",
+    howExample2: "Subsequent Requests:",
+    howExample2_1: "A user requests the same data",
+    howExample2_2: "The application already has this data in the cache and therefore DOES NOT query the DB",
+    howExample2_3: "The user receives the data",
+    howExampleNote: "This simple example shows that only the first data request hits the DB. All subsequent requests are served from the cache until the TTL expires.",
+    metricsTitle: "Cache Metrics",
+    metricsP1: "The performance of a cache can be evaluated using various metrics of differing utility. I will describe the ones I consider fundamental and most useful.",
+    metricsL1: "<b>Memory usage</b> allocated to the cache — how many resources are being used.",
+    metricsL2: "<b>Read/Write RPS</b> — the number of read/write operations per unit of time.",
+    metricsL3: "<b>Number of items</b> in the cache — useful to know in addition to memory usage.",
+    metricsL4: "<b>Hit rate</b> — the percentage of data retrieved from the cache (the closer to 100%, the better).",
+    metricsL5: "<b>Expired rate</b> — the percentage of items deleted due to TTL expiration.",
+    metricsL6: "<b>Eviction rate</b> — the percentage of items evicted when the memory limit is reached.",
+    whatToCacheTitle: "What Can Be Cached?",
+    whatToCacheP1: "Strictly speaking, you can cache anything, but it's not always practical. It heavily depends on the data and its usage patterns.",
+    whatToCacheP2: "All data can be roughly divided into 3 groups based on their frequency of change:",
+    whatToCacheL1: "<b>Changes frequently</b> — usually not cached (e.g., errors, but more on that later).",
+    whatToCacheL2: "<b>Changes infrequently</b> — good candidates (e.g., product lists, descriptions).",
+    whatToCacheL3: "<b>Changes very rarely</b> — ideal candidates (e.g., images, DNS records).",
+    typesTitle: "Types of Caches",
+    typesP1: "From an architectural perspective, there are two main types of caches: inline (or in-process) and sidecar (or out-of-process).",
+    typesInlineTitle: "Inline Cache",
+    typesInlineP1: "An inline cache lives within the application's process—it's the fastest option but can be problematic with multiple application replicas.",
+    typesSidecarTitle: "Sidecar Cache",
+    typesSidecarP1: "A separate service (e.g., Redis, Memcached)—slower due to network calls, but consistent and scalable.",
+    typesCompareTitle: "Comparison",
+    typesTableH1: "Characteristic",
+    typesTableH2: "Inline",
+    typesTableH3: "Sidecar",
+    typesTableR1C1: "Speed",
+    typesTableR1C2: "High",
+    typesTableR1C3: "Lower (network call)",
+    typesTableR2C1: "Memory",
+    typesTableR2C2: "Shared with application",
+    typesTableR2C3: "Separate",
+    typesTableR3C1: "Consistency",
+    typesTableR3C2: "Poor",
+    typesTableR3C3: "Good",
+    typesTableR4C1: "Scalability",
+    typesTableR4C2: "Harder",
+    typesTableR4C3: "Easier",
+    typesTableR5C1: "Complexity",
+    typesTableR5C2: "Simpler",
+    typesTableR5C3: "More complex",
+    strategiesTitle: "Caching Strategies",
+    strategiesT1: "Cache-through",
+    strategiesP1: "All requests go through the cache, which itself queries the DB on a miss. The application sees it as a single data store.",
+    strategiesT2: "Read-through",
+    strategiesP2: "The cache is responsible for fetching from the DB on a miss and populating itself.",
+    strategiesT3: "Write-through",
+    strategiesP3: "Writes go through the cache: the cache writes to the DB and updates itself only after a successful write.",
+    strategiesT4: "Cache-aside (write/read aside)",
+    strategiesP4: "The application itself checks the cache and the DB, deciding where to fetch from; flexible but more complex in code.",
+    strategiesT5: "Cache-ahead (proactive caching)",
+    strategiesP5: "A background process pre-populates the cache, and client requests only read from the cache.",
+    invalidationTitle: "Invalidation Strategies",
+    invalidationP1: "Invalidation is the process of removing or marking data as stale. Key approaches include:",
+    invalidationT1: "TTL (Time To Live)",
+    invalidationP2: "The simplest method—each entry has a TTL. The downside is mass expiration (spike)—when many keys expire at once, causing a flood of requests to the database (also known as the <b>Thundering Herd Problem</b>). This is solved using jitter.",
+    invalidationT2: "Jitter",
+    invalidationP3: "We add a random offset to the TTL to prevent a large number of keys from expiring simultaneously.",
+    invalidationT3: "Event-based Invalidation",
+    invalidationP4: "Invalidation upon an event—when the data in the source changes, we invalidate the corresponding keys.",
+    invalidationT4: "Singleflight / Request Coalescing",
+    invalidationP5: "If there are many identical, concurrent requests, we combine them into a single request to the source and distribute the result to all waiting clients.",
+    evictionTitle: "Eviction Policies",
+    evictionL1: "<b>Random</b> — remove a random entry.",
+    evictionL2: "<b>TTL</b> — evict based on the expiration time.",
+    evictionL3: "<b>LRU</b> — Least Recently Used.",
+    evictionL4: "<b>LFU</b> — Least Frequently Used.",
+    errorCacheTitle: "Error Caching",
+    errorCacheP1: "Caching errors helps protect against cache-miss attacks and shields the data source, but it requires careful TTLs and, preferably, a separate cache for errors.",
+    practicalTitle: "Practical Example (Pseudocode)",
+    compareTitle: "How to Compare 'With Cache' vs. 'No Cache'",
+    compareP1: "Recommended metrics and visualizations:",
+    compareL1: "Latency histograms (p50/p95/p99).",
+    compareL2: "Line graphs of latency over time.",
+    compareL3: "Hit rate dynamics.",
+    compareL4: "Queue length on the DB (if such metrics are available in the simulation).",
+    bestTitle: "Best Practices and Implementation Checklist",
+    bestL1: "Start with cache-aside for reads.",
+    bestL2: "Monitor hit rate, evictions, and latencies.",
+    bestL3: "Use jitter for TTLs and singleflight for hot keys.",
+    bestL4: "Cache errors cautiously with short TTLs.",
+    conclusionTitle: "Conclusion",
+    conclusionP1: "The cache is a powerful tool, but it adds complexity. Use metrics and test thoroughly. If you send a CSV with simulation results, I can help you add real graphs and a detailed analysis directly to this post.",
+    resultsTitle: "Simulation Results (Example)",
+    resultsUploadDesc: "Upload your CSV files (log_no_cache.csv and log_with_cache.csv) to generate charts from real data:",
+    resultsUploadNoCache: "Upload log_no_cache.csv",
+    resultsUploadWithCache: "Upload log_with_cache.csv",
+    resultsUseSample: "Use Sample Data",
+    resultsUploadNote: "Supported CSV fields: <code>time,client,response_time,source</code>. If your column names differ, you'll be prompted to map them upon upload.",
+    resultsChart1Title: "Response Time — Line Chart",
+    resultsChart2Title: "Response Time Distribution — Histogram",
+    resultsTableTitle: "Summary Statistics",
+    statsH1: "Scenario",
+    statsH2: "Average",
+    statsH3: "STD",
+    statsH4: "Passed %",
+    statsH5: "Failed %",
+    statsR1C1: "No Cache",
+    statsR1C2: "With Cache",
+    linksTitle: "Useful Links",
+    tocTitle: "Table of Contents",
+    tocL1: "What is Caching?",
+    tocL2: "Why is it Needed",
+    tocL3: "How it Works",
+    tocL4: "Metrics",
+    tocL5: "What to Cache",
+    tocL6: "Cache Types",
+    tocL7: "Strategies",
+    tocL8: "Invalidation",
+    tocL9: "Eviction",
+    tocL10: "Error Caching",
+    tocL11: "Pseudocode",
+    tocL12: "Simulation Results",
+    tocBtnUp: "To Top",
+    tocBtnPrint: "Print",
+    footer: "© 2025 — Demonstration article.",
+    chartTimeAxis: "Time (sim)",
+    chartResponseAxis: "Response Time (sec)",
+    chartRequestAxis: "Number of Requests",
+    chartLabelNoCache: "No Cache",
+    chartLabelWithCache: "With Cache"
+  }
+};
+
+/* =========================
+   Language switcher
+   ========================= */
+const langToggle = document.getElementById('langToggle');
+let currentLang = localStorage.getItem('language') || 'ru';
+
+function setLanguage(lang) {
+  currentLang = lang;
+  localStorage.setItem('language', lang);
+  document.documentElement.lang = lang;
+
+  const elements = document.querySelectorAll('[data-translate-key]');
+  elements.forEach(el => {
+    const key = el.dataset.translateKey;
+    if (translations[lang][key] && el.id !== 'layoutToggle') { // Exclude layout toggle from generic update
+      el.innerHTML = translations[lang][key];
+    }
+  });
+
+  document.title = translations[lang].pageTitle;
+  langToggle.textContent = translations[lang].langToggle;
+  
+  const currentTheme = document.body.getAttribute('data-theme');
+  const themeToggle = document.getElementById('themeToggle');
+  if (lang === 'en') {
+      themeToggle.textContent = currentTheme === 'dark' ? 'Light Theme' : 'Dark Theme';
+  } else {
+      themeToggle.textContent = currentTheme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
+  }
+  
+  // Explicitly update layout toggle text
+  setLayout(document.body.classList.contains('full-width'));
+  
+  if (lineChart && histChart) {
+    lineChart.options.scales.x.title.text = translations[lang].chartTimeAxis;
+    lineChart.options.scales.y.title.text = translations[lang].chartResponseAxis;
+    lineChart.data.datasets[0].label = translations[lang].chartLabelNoCache;
+    lineChart.data.datasets[1].label = translations[lang].chartLabelWithCache;
+    lineChart.update();
+
+    histChart.options.scales.y.title.text = translations[lang].chartRequestAxis;
+    histChart.data.datasets[0].label = translations[lang].chartLabelNoCache;
+    histChart.data.datasets[1].label = translations[lang].chartLabelWithCache;
+    histChart.update();
+  }
+}
+
+langToggle.addEventListener('click', () => {
+  const newLang = currentLang === 'ru' ? 'en' : 'ru';
+  setLanguage(newLang);
+});
+
+
+/* =========================
+   Theme toggle
+   ========================= */
+const themeToggle = document.getElementById('themeToggle');
+const body = document.body;
+themeToggle.addEventListener('click', () => {
+  const current = body.getAttribute('data-theme');
+  const next = current === 'light' ? 'dark' : 'light';
+  body.setAttribute('data-theme', next);
+
+  if (currentLang === 'en') {
+    themeToggle.textContent = next === 'dark' ? 'Light Theme' : 'Dark Theme';
+  } else {
+    themeToggle.textContent = next === 'dark' ? 'Светлая тема' : 'Тёмная тема';
+  }
+});
+
+
+/* =========================
+   Layout toggle
+   ========================= */
+const layoutToggle = document.getElementById('layoutToggle');
+
+function setLayout(isFull) {
+  localStorage.setItem('layoutMode', isFull ? 'full' : 'centered');
+  document.body.classList.toggle('full-width', isFull);
+  
+  const key = isFull ? 'layoutToggleCentered' : 'layoutToggle';
+  layoutToggle.innerHTML = translations[currentLang][key];
+}
+
+layoutToggle.addEventListener('click', () => {
+  const isCurrentlyFull = document.body.classList.contains('full-width');
+  setLayout(!isCurrentlyFull);
+});
+
+
+/* =========================
+   Utilities: CSV parse (simple)
+   ========================= */
+function parseCSV(text){
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if(!lines.length) return [];
+  const headers = lines[0].split(',').map(h => h.trim());
+  const rows = lines.slice(1).map(line => {
+    const parts = line.split(',');
+    const obj = {};
+    for(let i=0;i<headers.length;i++) obj[headers[i]] = (parts[i] || '').trim();
+    return obj;
+  });
+  return { headers, rows };
+}
+
+/* =========================
+   Chart setup (sample data)
+   ========================= */
+const timeCtx = document.getElementById('timeChart').getContext('2d');
+const histCtx = document.getElementById('histChart').getContext('2d');
+
+let lineChart = new Chart(timeCtx, {
+  type: 'line',
+  data: {
+    labels: Array.from({length:60}, (_,i)=>i),
+    datasets: [
+      { label:'Без кэша', data: Array.from({length:60},()=>Math.random()*2+1.6), borderColor:'rgb(220,38,38)', tension:0.25, pointRadius:0 },
+      { label:'С кэшем', data: Array.from({length:60},()=>Math.random()*0.4+0.08), borderColor:'rgb(16,185,129)', tension:0.25, pointRadius:0 }
+    ]
+  },
+  options:{
+    responsive:true,
+    plugins:{ legend:{ position:'top' } },
+    scales:{ 
+        x:{ title:{ display:true, text:'Время (сим)' } }, 
+        y:{ title:{ display:true, text:'Время отклика (сек)' } } 
+    }
+  }
+});
+
+let histChart = new Chart(histCtx, {
+  type: 'bar',
+  data: {
+    labels:['0-0.5','0.5-1.0','1.0-1.5','1.5-2.0','2.0+'],
+    datasets: [
+      { label:'Без кэша', data:[5,10,18,12,8], backgroundColor:'rgba(220,38,38,0.6)' },
+      { label:'С кэшем', data:[50,28,7,3,2], backgroundColor:'rgba(16,185,129,0.6)' }
+    ]
+  },
+  options:{
+    responsive:true,
+    plugins:{ legend:{ position:'top' } },
+    scales:{ 
+        y:{ title:{ display:true, text:'Количество запросов' } } 
+    }
+  }
+});
+
+/* =========================
+   Stats calculation & UI helpers
+   ========================= */
+function statsFromArray(arr){
+  if(!arr.length) return { avg:0, std:0, passedPct:0, failedPct:0 };
+  const n = arr.length;
+  const avg = arr.reduce((a,b)=>a+b,0)/n;
+  const variance = arr.reduce((a,b)=>a + (b-avg)*(b-avg),0)/n;
+  const std = Math.sqrt(variance);
+  const threshold = avg + std;
+  const passed = arr.filter(x=>x <= threshold).length;
+  const failed = n - passed;
+  return {
+    avg: avg,
+    std: std,
+    passedPct: Math.round(passed/n*100),
+    failedPct: Math.round(failed/n*100)
+  };
+}
+
+function updateStatsUI(noArr, yesArr){
+  const sNo = statsFromArray(noArr);
+  const sYes = statsFromArray(yesArr);
+  const unit = currentLang === 'en' ? ' s' : ' с';
+  document.getElementById('avgNo').textContent = sNo.avg.toFixed(3) + unit;
+  document.getElementById('stdNo').textContent = sNo.std.toFixed(3) + unit;
+  document.getElementById('passNo').textContent = sNo.passedPct + '%';
+  document.getElementById('failNo').textContent = sNo.failedPct + '%';
+
+  document.getElementById('avgYes').textContent = sYes.avg.toFixed(3) + unit;
+  document.getElementById('stdYes').textContent = sYes.std.toFixed(3) + unit;
+  document.getElementById('passYes').textContent = sYes.passedPct + '%';
+  document.getElementById('failYes').textContent = sYes.failedPct + '%';
+}
+
+/* =========================
+   Load sample data or CSVs
+   ========================= */
+function useSampleData(){
+  const t = Array.from({length:300}, (_,i)=>i/5);
+  const noArr = t.map(()=>Math.max(0.01, (Math.random()*2.2 + 1.4)));
+  const yesArr = t.map(()=>Math.max(0.001, (Math.random()*0.25 + 0.02)));
+  lineChart.data.labels = t.map(x=>x.toFixed(2));
+  lineChart.data.datasets[0].data = noArr;
+  lineChart.data.datasets[1].data = yesArr;
+  lineChart.update();
+  function binArr(arr){
+    const bins=[0,0,0,0,0];
+    arr.forEach(v=>{
+      if(v<0.5) bins[0]++;
+      else if(v<1) bins[1]++;
+      else if(v<1.5) bins[2]++;
+      else if(v<2) bins[3]++;
+      else bins[4]++;
+    });
+    return bins;
+  }
+  histChart.data.datasets[0].data = binArr(noArr);
+  histChart.data.datasets[1].data = binArr(yesArr);
+  histChart.update();
+
+  updateStatsUI(noArr, yesArr);
+}
+
+document.getElementById('useSample').addEventListener('click', useSampleData);
+
+/* =========================
+   CSV upload handlers
+   ========================= */
+function rowsToArrays(rows){
+  const noArr = [], yesArr = [];
+  rows.forEach(r=>{
+    const rt = parseFloat(r['response_time'] ?? r['response'] ?? r['responseTime'] ?? r['response-time']);
+    const src = (r['source']||r['Source']||'').toString().toLowerCase();
+    if(isNaN(rt)) return;
+    if(src.includes('cache')) yesArr.push(rt);
+    else noArr.push(rt);
+  });
+  return { noArr, yesArr };
+}
+
+function handleFileInput(fileInput, targetLabel){
+  const file = fileInput.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const parsed = parseCSV(e.target.result);
+      const { rows } = parsed;
+      const { noArr, yesArr } = rowsToArrays(rows);
+      if(targetLabel==='no'){
+        window._noArr = noArr;
+      } else {
+        window._yesArr = yesArr;
+      }
+      combineAndRender();
+    }catch(err){
+      alert((currentLang === 'en' ? 'Error reading CSV: ' : 'Ошибка чтения CSV: ') + err.message);
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+document.getElementById('fileNoCache').addEventListener('change', (e)=>handleFileInput(e.target,'no'));
+document.getElementById('fileWithCache').addEventListener('change', (e)=>handleFileInput(e.target,'yes'));
+
+function combineAndRender(){
+  const noArr = window._noArr || [];
+  const yesArr = window._yesArr || [];
+  const maxLen = Math.max(noArr.length || 0, yesArr.length || 0, 60);
+  const labels = Array.from({length:maxLen}, (_,i)=>i);
+  const noSeries = Array.from({length:maxLen}, (_,i)=> noArr[i] ?? null );
+  const yesSeries = Array.from({length:maxLen}, (_,i)=> yesArr[i] ?? null );
+  for(let i=0;i<maxLen;i++){
+    if(noSeries[i] === null) noSeries[i] = 0;
+    if(yesSeries[i] === null) yesSeries[i] = 0;
+  }
+  lineChart.data.labels = labels;
+  lineChart.data.datasets[0].data = noSeries;
+  lineChart.data.datasets[1].data = yesSeries;
+  lineChart.update();
+
+  histChart.data.datasets[0].data = binFromArray(noArr);
+  histChart.data.datasets[1].data = binFromArray(yesArr);
+  histChart.update();
+
+  updateStatsUI(noArr, yesArr);
+}
+
+function binFromArray(arr){
+  const bins=[0,0,0,0,0];
+  if(!arr || !arr.length) return bins;
+  arr.forEach(v=>{
+    if(v<0.5) bins[0]++;
+    else if(v<1) bins[1]++;
+    else if(v<1.5) bins[2]++;
+    else if(v<2) bins[3]++;
+    else bins[4]++;
+  });
+  return bins;
+}
+
+/* =========================
+   Misc UI & Init
+   ========================= */
+document.getElementById('scrollTop').addEventListener('click', ()=>window.scrollTo({top:0, behavior:'smooth'}));
+document.getElementById('printBtn').addEventListener('click', ()=>window.print());
+
+document.addEventListener('DOMContentLoaded', () => {
+    const savedLayout = localStorage.getItem('layoutMode') === 'full';
+    setLayout(savedLayout);
+    setLanguage(currentLang);
+    useSampleData();
+});
+
+</script>
+</body>
+</html>
